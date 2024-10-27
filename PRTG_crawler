@@ -1,0 +1,80 @@
+import pandas as pd
+import requests
+import getpass
+import matplotlib.pyplot as plt
+from openpyxl import load_workbook
+from openpyxl.drawing.image import  Image
+import os
+
+
+url = "http://127.0.0.1/api/table.json"
+
+username = input("Enter your PRGT Account username: ")
+password = getpass.getpass("Enter your password: ")
+passhash = input("Enter your passhash: ")
+params = {
+    'content': 'sensors',
+    'output': 'json',
+    'columns': 'device, sensor, status, lastvalue',
+    'username': username,
+    'password': password,
+    'passhash': passhash
+}
+
+# Send the GET request
+response = requests.get(url, params = params)
+data = response.json()
+
+# Extract the sensor data
+sensor_data = data['sensors']
+new_df = pd.DataFrame(sensor_data)
+
+# Excel file path
+excel_file = 'prtg_alarms_data.xlsx'
+
+# Check if the Excel file already exists
+if os.path.exists(excel_file):
+    # Read existing data from the Excel file
+    existing_df = pd.read_excel(excel_file)
+
+    # Identify new records by checking for unique 'sensor' values not in the existing data
+    combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['sensor'], keep='first')
+else:
+    # If no existing file, use the new data as is
+    combined_df = new_df
+
+# Save the updated data (without duplicates) to the Excel file
+combined_df.to_excel(excel_file, index=False)
+
+# Plotting the sensor status using matplotlib for a visual representation
+# Example: A bar chart of the number of devices in each status (Up, Down, Warning)
+status_counts = combined_df['status'].value_counts()
+
+# Create a bar chart
+plt.figure(figsize=(8, 6))
+status_counts.plot(kind='bar', color=['green', 'blue', 'red', 'yellow'])
+plt.title('Sensor Status Overview')
+plt.xlabel('Status')
+plt.ylabel('Number of Sensors')
+plt.xticks(rotation=0)
+plt.tight_layout()
+
+
+# Save the plot as an image
+chart_image = 'sensor_status_chart.png'
+plt.savefig(chart_image)
+
+# Load the existing Excel file and add the image to it using openpyxl
+wb = load_workbook(excel_file)
+ws = wb.active
+
+# Insert the image in a specific cell (e.g., B15)
+img = Image(chart_image)
+ws.add_image(img, 'A40')
+
+# Save the Excel file with the embedded chart
+wb.save(excel_file)
+
+# Notify the user
+print(f"Excel file '{excel_file}' with embedded chart has been created.")
+#print("Data saved to sensor_alarm_data.xlsx")
